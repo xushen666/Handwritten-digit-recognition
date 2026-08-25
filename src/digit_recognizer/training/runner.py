@@ -17,6 +17,11 @@ from torchvision import datasets, transforms
 
 from digit_recognizer import __version__
 from digit_recognizer.core.model import ImprovedMNISTNet, parameter_count
+from digit_recognizer.core.preprocessing import (
+    IMAGE_SIZE,
+    NORMALIZATION_MEAN,
+    NORMALIZATION_STD,
+)
 
 from .config import TrainingConfig, seed_everything, split_indices
 
@@ -28,13 +33,18 @@ def build_loaders(
 ) -> tuple[DataLoader[Any], DataLoader[Any], DataLoader[Any]]:
     training_transform = transforms.Compose(
         [
+            transforms.Resize(IMAGE_SIZE, antialias=True),
             transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1)),
             transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
+            transforms.Normalize(NORMALIZATION_MEAN, NORMALIZATION_STD),
         ]
     )
     evaluation_transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
+        [
+            transforms.Resize(IMAGE_SIZE, antialias=True),
+            transforms.ToTensor(),
+            transforms.Normalize(NORMALIZATION_MEAN, NORMALIZATION_STD),
+        ]
     )
     augmented_dataset = datasets.MNIST(
         root=data_dir, train=True, download=True, transform=training_transform
@@ -302,6 +312,7 @@ def train(
     metadata: dict[str, object] = {
         "version": __version__,
         "input_shape": [1, 28, 28],
+        "classes": list(range(10)),
         "parameter_count": parameter_count(cpu_model),
         "configuration": config.to_dict(),
         "test_accuracy": test_accuracy,

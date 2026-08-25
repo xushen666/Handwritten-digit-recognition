@@ -12,14 +12,16 @@ from .errors import BlankImageError, InvalidImageError
 ImageInput: TypeAlias = Image.Image | np.ndarray
 INK_RATIO_THRESHOLD = 0.002
 MAX_IMAGE_PIXELS = 4_000_000
-_IMAGE_SIZE = (28, 28)
+IMAGE_SIZE = (28, 28)
+NORMALIZATION_MEAN = (0.5,)
+NORMALIZATION_STD = (0.5,)
 
 _transform = v2.Compose(
     [
-        v2.Resize(_IMAGE_SIZE, antialias=True),
+        v2.Resize(IMAGE_SIZE, antialias=True),
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0.5], std=[0.5]),
+        v2.Normalize(mean=NORMALIZATION_MEAN, std=NORMALIZATION_STD),
     ]
 )
 
