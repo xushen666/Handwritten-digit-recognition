@@ -96,6 +96,10 @@ def test_release_workflow_builds_a_windows_zip_for_version_tags() -> None:
     assert "handwrittendigitrecognizer-windows-x64.zip" in normalized
     assert "softprops/action-gh-release@v2" in normalized
     assert "qt_qpa_platform: offscreen" in normalized
+    assert '"--smoke-test"' in normalized
+    assert ".waitforexit(30000)" in normalized
+    assert ".exitcode" in normalized
+    assert "start-sleep" not in normalized
 
     ordered_release_gates = (
         "python -m ruff check .",
@@ -104,10 +108,10 @@ def test_release_workflow_builds_a_windows_zip_for_version_tags() -> None:
         "pyinstaller packaging/windows.spec --clean --noconfirm",
         "dist/handwrittendigitrecognizer/_internal/models/mnist_cnn.pth",
         "start-process",
+        '-argumentlist "--smoke-test"',
         "-passthru",
-        "-windowstyle hidden",
-        "start-sleep -seconds 8",
-        ".hasexited",
+        ".waitforexit(30000)",
+        ".exitcode",
         "finally",
         "stop-process",
         "compress-archive",
