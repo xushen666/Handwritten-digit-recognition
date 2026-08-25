@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC_PATH = ROOT / "packaging" / "windows.spec"
+RUNTIME_HOOK_PATH = ROOT / "packaging" / "pyi_rth_torch_first.py"
 QUALITY_PATH = ROOT / ".github" / "workflows" / "quality.yml"
 RELEASE_PATH = ROOT / ".github" / "workflows" / "release.yml"
 
@@ -48,6 +49,15 @@ def test_windows_spec_resolves_resources_from_its_own_directory() -> None:
     assert namespace["MODEL_PATH"] == ROOT / "models/mnist_cnn.pth"
     assert namespace["ENTRY_POINT"].is_file()
     assert namespace["MODEL_PATH"].is_file()
+
+
+def test_windows_spec_loads_torch_before_standard_pyqt_runtime_hook() -> None:
+    hook = _read(RUNTIME_HOOK_PATH)
+    spec = _read(SPEC_PATH).replace("\\", "/").lower()
+
+    assert "import torch" in hook
+    assert 'root / "pyi_rth_torch_first.py"' in spec
+    assert "runtime_hooks=[str(torch_runtime_hook)]" in spec
 
 
 def test_quality_workflow_runs_the_desktop_quality_gates() -> None:

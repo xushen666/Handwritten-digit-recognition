@@ -9,6 +9,7 @@ ROOT = Path(SPECPATH).resolve().parent
 SOURCE_ROOT = ROOT / "src"
 ENTRY_POINT = ROOT / "src" / "digit_recognizer" / "desktop" / "app.py"
 MODEL_PATH = ROOT / "models" / "mnist_cnn.pth"
+TORCH_RUNTIME_HOOK = ROOT / "pyi_rth_torch_first.py"
 
 hidden_imports = [
     "PyQt5.sip",
@@ -27,7 +28,7 @@ analysis = Analysis(
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(TORCH_RUNTIME_HOOK)],
     excludes=["digit_recognizer.training", "matplotlib", "pytest"],
     noarchive=False,
     optimize=0,
