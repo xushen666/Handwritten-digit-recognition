@@ -1,6 +1,8 @@
 import argparse
 import hashlib
 import json
+import math
+import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 from statistics import median
@@ -260,6 +262,10 @@ def train(
     optimizer = Adam(model.parameters(), lr=config.learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
     model_path = models_dir / "mnist_cnn.pth"
+    with tempfile.NamedTemporaryFile(
+        dir=models_dir, prefix=".mnist_cnn-", suffix=".tmp", delete=False
+    ) as temporary_file:
+        temporary_model_path = Path(temporary_file.name)
     history: dict[str, list[float]] = {
         "train_loss": [],
         "train_accuracy": [],
@@ -267,35 +273,45 @@ def train(
         "validation_accuracy": [],
     }
     best_validation_accuracy = -1.0
+    checkpoint_saved = False
 
-    for epoch in range(config.epochs):
-        train_loss, train_accuracy = run_epoch(
-            model, training_loader, loss_function, device, optimizer
-        )
-        validation_loss, validation_accuracy = run_epoch(
-            model, validation_loader, loss_function, device
-        )
-        scheduler.step(validation_loss)
-        history["train_loss"].append(train_loss)
-        history["train_accuracy"].append(train_accuracy)
-        history["validation_loss"].append(validation_loss)
-        history["validation_accuracy"].append(validation_accuracy)
-        print(
-            f"Epoch {epoch + 1:02d}/{config.epochs}: "
-            f"train_acc={train_accuracy:.4f} val_acc={validation_accuracy:.4f}"
-        )
-        if validation_accuracy > best_validation_accuracy:
-            best_validation_accuracy = validation_accuracy
-            torch.save(model.state_dict(), model_path)
+    try:
+        for epoch in range(config.epochs):
+            train_loss, train_accuracy = run_epoch(
+                model, training_loader, loss_function, device, optimizer
+            )
+            validation_loss, validation_accuracy = run_epoch(
+                model, validation_loader, loss_function, device
+            )
+            if not math.isfinite(validation_loss) or not math.isfinite(validation_accuracy):
+                raise RuntimeError("non-finite validation metrics; training aborted")
+            scheduler.step(validation_loss)
+            history["train_loss"].append(train_loss)
+            history["train_accuracy"].append(train_accuracy)
+            history["validation_loss"].append(validation_loss)
+            history["validation_accuracy"].append(validation_accuracy)
+            print(
+                f"Epoch {epoch + 1:02d}/{config.epochs}: "
+                f"train_acc={train_accuracy:.4f} val_acc={validation_accuracy:.4f}"
+            )
+            if validation_accuracy > best_validation_accuracy:
+                best_validation_accuracy = validation_accuracy
+                torch.save(model.state_dict(), temporary_model_path)
+                checkpoint_saved = True
 
-    state = torch.load(model_path, map_location=device, weights_only=True)
-    model.load_state_dict(state)
-    test_loss, test_accuracy, matrix, sample = _evaluate_final(
-        model, test_loader, loss_function, device
-    )
+        if not checkpoint_saved:
+            raise RuntimeError("training did not produce a valid best checkpoint")
+        state = torch.load(temporary_model_path, map_location=device, weights_only=True)
+        model.load_state_dict(state)
+        test_loss, test_accuracy, matrix, sample = _evaluate_final(
+            model, test_loader, loss_function, device
+        )
+        cpu_model = model.cpu()
+        latency = benchmark(cpu_model, sample.cpu())
+        temporary_model_path.replace(model_path)
+    finally:
+        temporary_model_path.unlink(missing_ok=True)
 
-    cpu_model = model.cpu()
-    latency = benchmark(cpu_model, sample.cpu())
     model_hash = _sha256(model_path)
     _write_json(reports_dir / "history.json", history)
     _plot_training_curves(history, reports_dir / "training_curves.png")

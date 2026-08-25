@@ -188,6 +188,17 @@ def test_train_writes_complete_artifacts_and_iterates_test_once(
     models_dir = tmp_path / "models"
     reports_dir = tmp_path / "reports"
     config = TrainingConfig(epochs=2)
+    models_dir.mkdir()
+    model_path = models_dir / "mnist_cnn.pth"
+    model_path.write_bytes(b"previous-model")
+    replace_targets: list[tuple[Path, Path]] = []
+    original_replace = Path.replace
+
+    def track_replace(source: Path, target: Path) -> Path:
+        replace_targets.append((source, target))
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", track_replace)
 
     metrics = runner.train(
         config,
@@ -207,7 +218,10 @@ def test_train_writes_complete_artifacts_and_iterates_test_once(
         "confusion_matrix.png",
     ):
         assert (reports_dir / filename).is_file()
-    model_path = models_dir / "mnist_cnn.pth"
+    assert len(replace_targets) == 1
+    assert replace_targets[0][0] != model_path
+    assert replace_targets[0][1] == model_path
+    assert model_path.read_bytes() != b"previous-model"
     metadata = json.loads((models_dir / "model_metadata.json").read_text(encoding="utf-8"))
     assert metadata["version"] == "0.1.0"
     assert metadata["input_shape"] == [1, 28, 28]
@@ -217,6 +231,32 @@ def test_train_writes_complete_artifacts_and_iterates_test_once(
     assert metadata["test_accuracy"] == 0.995
     assert metadata["latency_ms"] == {"median": 1.0, "p95": 2.0}
     assert metadata["sha256"] == hashlib.sha256(model_path.read_bytes()).hexdigest()
+
+
+def test_train_rejects_non_finite_validation_without_touching_existing_model(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    loaders = (TrackingLoader([]), TrackingLoader([]), TrackingLoader([]))
+    epoch_results = iter([(0.4, 0.8), (float("nan"), float("nan"))])
+    monkeypatch.setattr(runner, "build_loaders", lambda config, data_dir: loaders)
+    monkeypatch.setattr(runner, "run_epoch", lambda *args, **kwargs: next(epoch_results))
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    model_path = models_dir / "mnist_cnn.pth"
+    previous_model = b"previous-model-must-remain"
+    model_path.write_bytes(previous_model)
+
+    with pytest.raises(RuntimeError, match="non-finite validation metrics"):
+        runner.train(
+            TrainingConfig(epochs=1),
+            tmp_path / "data",
+            models_dir,
+            tmp_path / "reports",
+            "cpu",
+        )
+
+    assert model_path.read_bytes() == previous_model
+    assert list(models_dir.glob(".mnist_cnn-*.tmp")) == []
 
 
 def test_main_exits_nonzero_below_minimum_accuracy(
