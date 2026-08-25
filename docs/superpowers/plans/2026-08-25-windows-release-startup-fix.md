@@ -31,7 +31,7 @@ def test_windows_spec_loads_torch_before_standard_pyqt_runtime_hook() -> None:
     spec = _read(SPEC_PATH).replace("\\", "/").lower()
 
     assert "import torch" in hook
-    assert 'root / "pyi_rth_torch_first.py"' in spec
+    assert 'root / "packaging" / "pyi_rth_torch_first.py"' in spec
     assert "runtime_hooks=[str(torch_runtime_hook)]" in spec
 ```
 
@@ -58,7 +58,7 @@ import torch  # noqa: F401
 Add to `windows.spec`:
 
 ```python
-TORCH_RUNTIME_HOOK = ROOT / "pyi_rth_torch_first.py"
+TORCH_RUNTIME_HOOK = ROOT / "packaging" / "pyi_rth_torch_first.py"
 ```
 
 and change the `Analysis` argument to:
@@ -286,4 +286,3 @@ Commit the implementation with:
 git add packaging/pyi_rth_torch_first.py packaging/windows.spec src/digit_recognizer/desktop/app.py tests/desktop/test_canvas.py tests/test_delivery_config.py .github/workflows/release.yml
 git commit -m "fix: validate frozen Windows startup"
 ```
-

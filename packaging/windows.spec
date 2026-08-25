@@ -9,7 +9,7 @@ ROOT = Path(SPECPATH).resolve().parent
 SOURCE_ROOT = ROOT / "src"
 ENTRY_POINT = ROOT / "src" / "digit_recognizer" / "desktop" / "app.py"
 MODEL_PATH = ROOT / "models" / "mnist_cnn.pth"
-TORCH_RUNTIME_HOOK = ROOT / "pyi_rth_torch_first.py"
+TORCH_RUNTIME_HOOK = ROOT / "packaging" / "pyi_rth_torch_first.py"
 
 hidden_imports = [
     "PyQt5.sip",

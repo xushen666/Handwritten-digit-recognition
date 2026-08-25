@@ -33,7 +33,7 @@ def test_windows_spec_packages_only_the_desktop_application() -> None:
 
 def test_windows_spec_resolves_resources_from_its_own_directory() -> None:
     tree = ast.parse(_read(SPEC_PATH), filename=str(SPEC_PATH))
-    path_names = {"ROOT", "SOURCE_ROOT", "ENTRY_POINT", "MODEL_PATH"}
+    path_names = {"ROOT", "SOURCE_ROOT", "ENTRY_POINT", "MODEL_PATH", "TORCH_RUNTIME_HOOK"}
     path_assignments = [
         node
         for node in tree.body
@@ -47,8 +47,10 @@ def test_windows_spec_resolves_resources_from_its_own_directory() -> None:
     assert namespace["SOURCE_ROOT"] == ROOT / "src"
     assert namespace["ENTRY_POINT"] == ROOT / "src/digit_recognizer/desktop/app.py"
     assert namespace["MODEL_PATH"] == ROOT / "models/mnist_cnn.pth"
+    assert namespace["TORCH_RUNTIME_HOOK"] == ROOT / "packaging/pyi_rth_torch_first.py"
     assert namespace["ENTRY_POINT"].is_file()
     assert namespace["MODEL_PATH"].is_file()
+    assert namespace["TORCH_RUNTIME_HOOK"].is_file()
 
 
 def test_windows_spec_loads_torch_before_standard_pyqt_runtime_hook() -> None:
@@ -56,7 +58,7 @@ def test_windows_spec_loads_torch_before_standard_pyqt_runtime_hook() -> None:
     spec = _read(SPEC_PATH).replace("\\", "/").lower()
 
     assert "import torch" in hook
-    assert 'root / "pyi_rth_torch_first.py"' in spec
+    assert 'root / "packaging" / "pyi_rth_torch_first.py"' in spec
     assert "runtime_hooks=[str(torch_runtime_hook)]" in spec
 
 
