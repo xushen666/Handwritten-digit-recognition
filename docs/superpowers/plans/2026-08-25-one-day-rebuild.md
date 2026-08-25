@@ -1,985 +1,196 @@
-# Handwritten Digit Recognition One-Day Rebuild Implementation Plan
+# 手写数字识别项目一天闭环实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> 执行方式：按任务依次使用测试驱动开发、规格审查和代码质量审查。除正式训练、桌面人工冒烟和打包外，测试不得下载 MNIST。
 
-**Goal:** Build a reproducible MNIST inference core, FastAPI/Web service, offline PyQt client, automated tests, Docker image, Windows release workflow, and truthful portfolio documentation in one day.
+**目标：** 在一天内交付一个以 PyQt 桌面端为唯一产品入口、具备可复现训练评测、自动测试和 Windows 打包能力的求职作品。
 
-**Architecture:** A single Python package owns the CNN definition, preprocessing, blank-input validation, model loading, and inference. FastAPI and PyQt are thin adapters over that core; the browser calls FastAPI, while the desktop app calls the core directly. Training writes versioned model metadata and reports that documentation consumes as the only source of quantitative claims.
+**架构：** 单一 Python 包维护 CNN、预处理、空白判断、路径解析和 Predictor。训练模块复用同一模型及预处理配置并生成可信产物；PyQt 作为薄适配层直接调用 Predictor。无后端服务、Web、Docker或在线部署。
 
-**Tech Stack:** Python 3.11, PyTorch, torchvision, Pillow, NumPy, FastAPI, Uvicorn, PyQt5, pytest, Ruff, matplotlib, Docker, PyInstaller, GitHub Actions.
+**技术栈：** Python 3.11、PyTorch、torchvision、Pillow、NumPy、PyQt5、pytest、Ruff、matplotlib、PyInstaller、GitHub Actions。
+
+## 文件地图
+
+- `src/digit_recognizer/core/`：模型、预处理、路径解析和推理。
+- `src/digit_recognizer/training/`：确定性配置、训练、最终评测和产物生成。
+- `src/digit_recognizer/desktop/app.py`：PyQt 画板、窗口和入口。
+- `scripts/train.py`：正式训练命令入口。
+- `scripts/sync_docs.py`：从评测 JSON 同步 README 和简历数字。
+- `tests/core/`、`tests/training/`、`tests/desktop/`：快速确定性测试。
+- `models/`、`reports/`：发布权重、元数据、指标和图表。
+- `packaging/windows.spec`：Windows onedir 打包。
+- `.github/workflows/quality.yml`：CPU 测试与代码检查。
+- `.github/workflows/release.yml`：标签触发 Windows Release。
+- `README.md`、`docs/resume-project.md`：作品集与简历材料。
+
+## 范围约束
+
+本计划明确取消 FastAPI、Uvicorn、API schema、Web 静态页、Dockerfile、Docker 工作流、在线部署和对应文档。不得以“增强展示”为理由重新加入。
 
 ---
 
-## File map
+### Task 1：建立可安装仓库骨架（已完成）
 
-- `pyproject.toml`: package metadata, dependencies, command entry points, pytest and Ruff configuration.
-- `.gitignore`: datasets, environments, caches, reports under construction, and build products.
-- `src/digit_recognizer/core/model.py`: the single CNN definition.
-- `src/digit_recognizer/core/preprocessing.py`: image conversion, blank detection, and tensor preparation.
-- `src/digit_recognizer/core/predictor.py`: model loading, inference, confidence, and latency.
-- `src/digit_recognizer/core/paths.py`: development and PyInstaller model path resolution.
-- `src/digit_recognizer/training/config.py`: deterministic training configuration and split generation.
-- `src/digit_recognizer/training/runner.py`: train, validate, final-test, benchmark, and artifact generation.
-- `src/digit_recognizer/api/app.py`: FastAPI application factory and error mapping.
-- `src/digit_recognizer/api/schemas.py`: public API response models.
-- `src/digit_recognizer/web/index.html`: browser drawing surface.
-- `src/digit_recognizer/web/app.js`: canvas events and API call.
-- `src/digit_recognizer/web/style.css`: minimal presentation.
-- `src/digit_recognizer/desktop/app.py`: PyQt canvas, window, and entry point.
-- `scripts/train.py`: stable training CLI.
-- `scripts/sync_docs.py`: reads generated metrics and updates README/resume claims deterministically.
-- `tests/`: fast core, configuration, API, and desktop conversion tests.
-- `Dockerfile`, `.dockerignore`: API/Web CPU image.
-- `packaging/windows.spec`: onedir PyInstaller build.
-- `.github/workflows/quality.yml`: lint, tests, API import, and Docker build.
-- `.github/workflows/release.yml`: tagged Windows artifact and GitHub Release.
-- `README.md`: English summary plus Chinese documentation.
-- `docs/resume-project.md`: verified resume wording.
-- `LICENSE`: MIT license.
+已完成：
 
-### Task 1: Create the installable project skeleton
+- 包结构、`pyproject.toml`、MIT License、`.gitignore` 和 README 占位。
+- Python 3.11 环境与 CPU/GPU 依赖契约。
+- 初始安装和导入测试。
 
-**Files:**
-- Modify: `.gitignore`
-- Create: `pyproject.toml`
-- Create: `LICENSE`
-- Create: `README.md`
-- Create: `src/digit_recognizer/__init__.py`
-- Create: `src/digit_recognizer/core/__init__.py`
-- Create: `src/digit_recognizer/api/__init__.py`
-- Create: `src/digit_recognizer/desktop/__init__.py`
-- Create: `src/digit_recognizer/training/__init__.py`
-- Test: `tests/test_package.py`
+验收：项目可 editable install，快速测试与 Ruff 通过。
 
-- [ ] **Step 1: Write the failing package test**
+### Task 2：统一图像预处理（已完成）
 
-```python
-# tests/test_package.py
-from digit_recognizer import __version__
+已完成：
 
+- PIL/NumPy 输入校验、透明白底合成、灰度与反色。
+- 共享 28×28、均值和标准差配置。
+- 空白输入判断与显式领域错误。
+- 边界、非法输入和透明图测试。
 
-def test_package_version() -> None:
-    assert __version__ == "0.1.0"
+验收：桌面端和训练端不复制尺寸或归一化常量。
+
+### Task 3：实现模型与 Predictor（已完成）
+
+已完成：
+
+- 唯一 CNN 定义，参数量固定为 585,578。
+- 结构化预测结果和安全 `weights_only` 权重加载。
+- 环境变量、PyInstaller、工作目录和源码目录的模型路径优先级。
+- 模型缺失、损坏、形状和路径回归测试。
+
+验收：核心预测测试通过，开发和打包路径均可解析。
+
+### Task 4：完成可复现训练与模型评测（代码完成，正式产物待重跑）
+
+**文件：**
+
+- `src/digit_recognizer/training/config.py`
+- `src/digit_recognizer/training/runner.py`
+- `scripts/train.py`
+- `tests/training/test_config.py`
+
+已完成的代码契约：
+
+- seed 42、55,000/5,000 固定训练验证划分、默认 15 轮。
+- 训练集增强，验证和测试不增强。
+- Adam、ReduceLROnPlateau 和验证集最佳权重。
+- 测试集只遍历一次，准确率低于 99.0% 非零退出。
+- 临时 checkpoint、非有限指标拒绝、原子发布和 SHA-256。
+- history、metrics、训练曲线、混淆矩阵和模型元数据。
+- Matplotlib 在导入 `pyplot` 前强制使用 `Agg`，避免 Qt 后端阻塞。
+
+- [x] 训练/核心轻量测试与双重审查通过。
+- [x] RTX 4060、PyTorch 2.10.0+cu128 和 CUDA 可用性验证。
+- [ ] 重新执行正式训练：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\train.py --device auto --epochs 15
 ```
 
-- [ ] **Step 2: Run the test and verify the package does not exist**
+- [ ] 验证六类产物存在，准确率不低于 99.0%，元数据 SHA-256 与权重一致。
+- [ ] 单独提交生成的模型和报告：
 
-Run: `python -m pytest tests/test_package.py -v`
-
-Expected: FAIL during collection with `ModuleNotFoundError: No module named 'digit_recognizer'`.
-
-- [ ] **Step 3: Add packaging, dependency groups, and package initializers**
-
-```toml
-# pyproject.toml
-[build-system]
-requires = ["setuptools>=69", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "handwritten-digit-recognition"
-version = "0.1.0"
-description = "Reproducible MNIST inference with FastAPI, Web, and PyQt clients"
-readme = "README.md"
-requires-python = ">=3.11,<3.12"
-license = { text = "MIT" }
-authors = [{ name = "xushen666" }]
-dependencies = [
-  "numpy>=1.26,<3",
-  "pillow>=10,<12",
-  "torch>=2.3,<3",
-  "torchvision>=0.18,<1",
-]
-
-[project.optional-dependencies]
-api = ["fastapi>=0.115,<1", "python-multipart>=0.0.9,<1", "uvicorn[standard]>=0.30,<1"]
-desktop = ["PyQt5>=5.15.10,<6"]
-train = ["matplotlib>=3.9,<4"]
-dev = ["build>=1.2,<2", "httpx>=0.27,<1", "pytest>=8,<9", "ruff>=0.6,<1"]
-all = [
-  "fastapi>=0.115,<1", "python-multipart>=0.0.9,<1", "uvicorn[standard]>=0.30,<1",
-  "PyQt5>=5.15.10,<6", "matplotlib>=3.9,<4",
-]
-
-[project.scripts]
-digit-api = "digit_recognizer.api.app:main"
-digit-desktop = "digit_recognizer.desktop.app:main"
-digit-train = "digit_recognizer.training.runner:main"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-digit_recognizer = ["web/*.html", "web/*.js", "web/*.css"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-q"
-
-[tool.ruff]
-target-version = "py311"
-line-length = 100
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
-```
-
-```python
-# src/digit_recognizer/__init__.py
-__version__ = "0.1.0"
-```
-
-Create the four subpackage `__init__.py` files as empty files. Extend `.gitignore` with:
-
-```gitignore
-.worktrees/
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.ruff_cache/
-.idea/
-data/
-build/
-dist/
-*.spec.bak
-*.zip
-*.exe
-```
-
-Add the standard MIT License text with copyright line `Copyright (c) 2026 xushen666`.
-
-Create the initial README so editable installation has a valid readme target:
-
-```markdown
-# Handwritten Digit Recognition
-
-Portfolio-oriented reconstruction of an MNIST recognizer with a shared PyTorch core,
-FastAPI/Web delivery, and an offline PyQt client. Verified metrics and full Chinese
-usage documentation are generated after reproducible retraining.
-```
-
-- [ ] **Step 4: Install the editable development environment and rerun the test**
-
-Run: `python -m pip install -e ".[api,desktop,train,dev]"`
-
-Expected: installation completes without dependency resolution errors.
-
-Run: `python -m pytest tests/test_package.py -v`
-
-Expected: `1 passed`.
-
-- [ ] **Step 5: Commit the skeleton**
-
-```bash
-git add .gitignore pyproject.toml LICENSE README.md src tests/test_package.py
-git commit -m "chore: scaffold installable Python project"
-```
-
-Before later opening a pull request, publish the already-approved design-only `main` branch from the primary worktree:
-
-```bash
-git -C "E:\csdiy\项目重构\Handwritten-digit-recognition" push -u origin main
-```
-
-### Task 2: Implement deterministic preprocessing and blank detection
-
-**Files:**
-- Create: `src/digit_recognizer/core/errors.py`
-- Create: `src/digit_recognizer/core/preprocessing.py`
-- Test: `tests/core/test_preprocessing.py`
-
-- [ ] **Step 1: Write preprocessing tests**
-
-```python
-# tests/core/test_preprocessing.py
-import numpy as np
-import pytest
-from PIL import Image, ImageDraw
-
-from digit_recognizer.core.errors import BlankImageError, InvalidImageError
-from digit_recognizer.core.preprocessing import is_blank, prepare_image
-
-
-def test_prepare_image_returns_normalized_mnist_tensor() -> None:
-    image = Image.new("RGB", (280, 280), "white")
-    ImageDraw.Draw(image).line((30, 30, 250, 250), fill="black", width=20)
-    tensor = prepare_image(image)
-    assert tensor.shape == (1, 1, 28, 28)
-    assert tensor.dtype.is_floating_point
-    assert -1.0 <= float(tensor.min()) <= float(tensor.max()) <= 1.0
-
-
-def test_blank_white_image_is_rejected() -> None:
-    image = Image.new("L", (280, 280), 255)
-    assert is_blank(image)
-    with pytest.raises(BlankImageError):
-        prepare_image(image)
-
-
-def test_invalid_array_shape_is_rejected() -> None:
-    with pytest.raises(InvalidImageError):
-        prepare_image(np.zeros((2, 2, 2, 2), dtype=np.uint8))
-```
-
-- [ ] **Step 2: Run tests and verify missing-module failure**
-
-Run: `python -m pytest tests/core/test_preprocessing.py -v`
-
-Expected: FAIL with `ModuleNotFoundError` for `digit_recognizer.core.errors`.
-
-- [ ] **Step 3: Implement preprocessing**
-
-```python
-# src/digit_recognizer/core/errors.py
-class DigitRecognizerError(Exception):
-    """Base error for expected application failures."""
-
-
-class InvalidImageError(DigitRecognizerError):
-    pass
-
-
-class BlankImageError(DigitRecognizerError):
-    pass
-
-
-class ModelLoadError(DigitRecognizerError):
-    pass
-```
-
-```python
-# src/digit_recognizer/core/preprocessing.py
-from typing import TypeAlias
-
-import numpy as np
-import torch
-from PIL import Image, UnidentifiedImageError
-from torchvision.transforms import v2
-
-from .errors import BlankImageError, InvalidImageError
-
-ImageInput: TypeAlias = Image.Image | np.ndarray
-INK_RATIO_THRESHOLD = 0.002
-
-_transform = v2.Compose(
-    [
-        v2.Resize((28, 28), antialias=True),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0.5], std=[0.5]),
-    ]
-)
-
-
-def to_grayscale(image: ImageInput) -> Image.Image:
-    try:
-        if isinstance(image, np.ndarray):
-            if image.ndim not in (2, 3) or (image.ndim == 3 and image.shape[2] not in (3, 4)):
-                raise InvalidImageError("Unsupported NumPy image shape")
-            image = Image.fromarray(image.astype(np.uint8, copy=False))
-        if not isinstance(image, Image.Image):
-            raise InvalidImageError("Expected a PIL image or NumPy array")
-        return image.convert("L")
-    except (TypeError, ValueError, UnidentifiedImageError) as exc:
-        raise InvalidImageError("Image could not be decoded") from exc
-
-
-def is_blank(image: ImageInput) -> bool:
-    gray = np.asarray(to_grayscale(image), dtype=np.float32)
-    ink_ratio = float(np.mean((255.0 - gray) / 255.0))
-    return ink_ratio < INK_RATIO_THRESHOLD
-
-
-def prepare_image(image: ImageInput, *, reject_blank: bool = True) -> torch.Tensor:
-    gray = to_grayscale(image)
-    if reject_blank and is_blank(gray):
-        raise BlankImageError("The image does not contain visible handwriting")
-    inverted = Image.eval(gray, lambda value: 255 - value)
-    return _transform(inverted).unsqueeze(0)
-```
-
-- [ ] **Step 4: Run focused tests**
-
-Run: `python -m pytest tests/core/test_preprocessing.py -v`
-
-Expected: `3 passed`.
-
-- [ ] **Step 5: Commit preprocessing**
-
-```bash
-git add src/digit_recognizer/core tests/core/test_preprocessing.py
-git commit -m "feat: add shared image preprocessing"
-```
-
-### Task 3: Implement the CNN, model path resolution, and Predictor
-
-**Files:**
-- Create: `src/digit_recognizer/core/model.py`
-- Create: `src/digit_recognizer/core/paths.py`
-- Create: `src/digit_recognizer/core/predictor.py`
-- Create: `models/.gitkeep`
-- Test: `tests/core/test_predictor.py`
-
-- [ ] **Step 1: Write predictor tests**
-
-```python
-# tests/core/test_predictor.py
-from pathlib import Path
-
-import torch
-from PIL import Image, ImageDraw
-
-from digit_recognizer.core.model import ImprovedMNISTNet, parameter_count
-from digit_recognizer.core.predictor import Predictor
-
-
-def test_model_parameter_count_is_stable() -> None:
-    assert parameter_count(ImprovedMNISTNet()) == 585_578
-
-
-def test_predictor_loads_state_dict_and_returns_prediction(tmp_path: Path) -> None:
-    model_path = tmp_path / "model.pth"
-    torch.save(ImprovedMNISTNet().state_dict(), model_path)
-    image = Image.new("L", (280, 280), 255)
-    ImageDraw.Draw(image).line((140, 40, 140, 240), fill=0, width=24)
-    result = Predictor.load(model_path).predict(image)
-    assert 0 <= result.digit <= 9
-    assert 0.0 <= result.confidence <= 1.0
-    assert result.latency_ms >= 0.0
-```
-
-- [ ] **Step 2: Run tests and verify missing model failure**
-
-Run: `python -m pytest tests/core/test_predictor.py -v`
-
-Expected: FAIL with missing `digit_recognizer.core.model`.
-
-- [ ] **Step 3: Implement model, paths, and prediction**
-
-Create the model with the complete architecture below:
-
-```python
-# src/digit_recognizer/core/model.py
-import torch
-from torch import nn
-
-
-class ImprovedMNISTNet(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(32, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25),
-        )
-        self.classifier = nn.Sequential(
-            nn.Linear(128 * 3 * 3, 256),
-            nn.BatchNorm1d(256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(256, 10),
-        )
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        features = self.features(inputs)
-        return self.classifier(torch.flatten(features, 1))
-
-
-def parameter_count(model: nn.Module) -> int:
-    return sum(parameter.numel() for parameter in model.parameters())
-```
-
-```python
-# src/digit_recognizer/core/paths.py
-import os
-import sys
-from pathlib import Path
-
-
-def default_model_path() -> Path:
-    if configured := os.getenv("DIGIT_MODEL_PATH"):
-        return Path(configured).expanduser().resolve()
-    if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS) / "models" / "mnist_cnn.pth"  # type: ignore[attr-defined]
-    return Path(__file__).resolve().parents[3] / "models" / "mnist_cnn.pth"
-```
-
-```python
-# src/digit_recognizer/core/predictor.py
-from dataclasses import dataclass
-from pathlib import Path
-from time import perf_counter
-
-import torch
-
-from .errors import ModelLoadError
-from .model import ImprovedMNISTNet
-from .preprocessing import ImageInput, prepare_image
-
-
-@dataclass(frozen=True, slots=True)
-class Prediction:
-    digit: int
-    confidence: float
-    latency_ms: float
-
-
-class Predictor:
-    def __init__(self, model: ImprovedMNISTNet) -> None:
-        self.model = model.eval().cpu()
-
-    @classmethod
-    def load(cls, path: str | Path) -> "Predictor":
-        model_path = Path(path)
-        if not model_path.is_file():
-            raise ModelLoadError(f"Model file not found: {model_path}")
-        try:
-            state = torch.load(model_path, map_location="cpu", weights_only=True)
-            model = ImprovedMNISTNet()
-            model.load_state_dict(state)
-            return cls(model)
-        except (OSError, RuntimeError, ValueError) as exc:
-            raise ModelLoadError("Model file is invalid or incompatible") from exc
-
-    def predict(self, image: ImageInput) -> Prediction:
-        tensor = prepare_image(image)
-        started = perf_counter()
-        with torch.inference_mode():
-            probabilities = torch.softmax(self.model(tensor), dim=1)
-            confidence, prediction = probabilities.max(dim=1)
-        elapsed_ms = (perf_counter() - started) * 1000.0
-        return Prediction(int(prediction.item()), float(confidence.item()), elapsed_ms)
-```
-
-- [ ] **Step 4: Run core tests**
-
-Run: `python -m pytest tests/core -v`
-
-Expected: `5 passed`.
-
-- [ ] **Step 5: Commit inference core**
-
-```bash
-git add src/digit_recognizer/core models tests/core
-git commit -m "feat: add reusable MNIST predictor"
-```
-
-### Task 4: Make training and evaluation reproducible
-
-**Files:**
-- Create: `src/digit_recognizer/training/config.py`
-- Create: `src/digit_recognizer/training/runner.py`
-- Create: `scripts/train.py`
-- Test: `tests/training/test_config.py`
-
-- [ ] **Step 1: Write deterministic split tests**
-
-```python
-# tests/training/test_config.py
-from digit_recognizer.training.config import TrainingConfig, split_indices
-
-
-def test_split_is_deterministic_and_disjoint() -> None:
-    first_train, first_validation = split_indices(60_000, 5_000, 42)
-    second_train, second_validation = split_indices(60_000, 5_000, 42)
-    assert first_train == second_train
-    assert first_validation == second_validation
-    assert len(first_train) == 55_000
-    assert len(first_validation) == 5_000
-    assert set(first_train).isdisjoint(first_validation)
-
-
-def test_default_training_contract() -> None:
-    config = TrainingConfig()
-    assert config.epochs == 15
-    assert config.seed == 42
-    assert config.validation_size == 5_000
-```
-
-- [ ] **Step 2: Run tests and verify missing training config**
-
-Run: `python -m pytest tests/training/test_config.py -v`
-
-Expected: FAIL with missing `digit_recognizer.training.config`.
-
-- [ ] **Step 3: Implement the fixed configuration and split**
-
-```python
-# src/digit_recognizer/training/config.py
-from dataclasses import asdict, dataclass
-import random
-
-import numpy as np
-import torch
-
-
-@dataclass(frozen=True, slots=True)
-class TrainingConfig:
-    seed: int = 42
-    validation_size: int = 5_000
-    batch_size: int = 256
-    epochs: int = 15
-    learning_rate: float = 0.001
-    num_workers: int = 0
-
-    def to_dict(self) -> dict[str, int | float]:
-        return asdict(self)
-
-
-def seed_everything(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-
-
-def split_indices(size: int, validation_size: int, seed: int) -> tuple[list[int], list[int]]:
-    generator = torch.Generator().manual_seed(seed)
-    order = torch.randperm(size, generator=generator).tolist()
-    return order[validation_size:], order[:validation_size]
-```
-
-- [ ] **Step 4: Implement the runner with one final test evaluation**
-
-`runner.py` must define six typed units, each independently callable by tests or the CLI:
-
-- `build_loaders` accepts `TrainingConfig` and a `Path`, returning the training, validation, and test `DataLoader` objects.
-- `run_epoch` accepts a model, loader, loss function, device, and optional optimizer, returning mean loss and accuracy as two floats.
-- `confusion_matrix` accepts a model, loader, and device, returning a 10-by-10 nested integer list.
-- `benchmark` accepts a model, one input tensor, and an integer run count defaulting to 100, returning float values under `median` and `p95`.
-- `train` accepts the configuration, data/models/reports paths, and device name, returning the exact dictionary persisted to `reports/metrics.json`.
-- `main` parses `--data-dir`, `--models-dir`, `--reports-dir`, `--device`, `--epochs`, and `--seed`, constructs the configuration, and calls `train`.
-
-Implementation requirements:
-
-- Create separate MNIST dataset objects for augmented training and non-augmented validation.
-- Use `split_indices` for both datasets, `CrossEntropyLoss`, Adam, and `ReduceLROnPlateau`.
-- Save `models/mnist_cnn.pth` only when validation accuracy improves.
-- Load that file after all epochs, then evaluate the test loader exactly once.
-- Save `reports/history.json`, `reports/metrics.json`, `reports/training_curves.png`, and `reports/confusion_matrix.png`.
-- Save `models/model_metadata.json` containing version `0.1.0`, input shape `[1, 28, 28]`, parameter count `585578`, configuration, test accuracy, latency median/P95, and SHA-256 of `mnist_cnn.pth`.
-- Exit nonzero when final test accuracy is below `0.99`.
-
-```python
-# scripts/train.py
-from digit_recognizer.training.runner import main
-
-
-if __name__ == "__main__":
-    main()
-```
-
-- [ ] **Step 5: Run fast tests, then start the real GPU training**
-
-Run: `python -m pytest tests/training tests/core -v`
-
-Expected: all tests PASS without downloading MNIST.
-
-Run: `python scripts/train.py --device auto --epochs 15`
-
-Expected: CUDA is selected when available; the command creates the model, metadata, metrics, two PNG reports, and exits successfully only when test accuracy is at least 99.0%.
-
-- [ ] **Step 6: Commit training code separately from generated results**
-
-```bash
-git add src/digit_recognizer/training scripts/train.py tests/training
-git commit -m "feat: add reproducible training and evaluation"
+```powershell
 git add models/mnist_cnn.pth models/model_metadata.json reports
 git commit -m "data: publish verified MNIST model metrics"
 ```
 
-### Task 5: Add FastAPI and the minimal Web client
+### Task 5：重构现有 PyQt 桌面端
 
-**Files:**
-- Create: `src/digit_recognizer/api/schemas.py`
-- Create: `src/digit_recognizer/api/app.py`
-- Create: `src/digit_recognizer/web/index.html`
-- Create: `src/digit_recognizer/web/app.js`
-- Create: `src/digit_recognizer/web/style.css`
-- Test: `tests/api/test_app.py`
+**文件：**
 
-- [ ] **Step 1: Write API tests with a stub predictor**
-
-```python
-# tests/api/test_app.py
-from io import BytesIO
-
-from fastapi.testclient import TestClient
-from PIL import Image
-
-from digit_recognizer.api.app import create_app
-from digit_recognizer.core.predictor import Prediction
-
-
-class StubPredictor:
-    def predict(self, image: Image.Image) -> Prediction:
-        return Prediction(digit=7, confidence=0.98, latency_ms=1.25)
-
-
-def png_bytes(color: str = "black") -> bytes:
-    image = Image.new("RGB", (28, 28), color)
-    output = BytesIO()
-    image.save(output, format="PNG")
-    return output.getvalue()
-
-
-def test_health_and_prediction() -> None:
-    client = TestClient(create_app(predictor=StubPredictor()))
-    assert client.get("/health").json()["model_loaded"] is True
-    response = client.post("/api/v1/predict", files={"file": ("digit.png", png_bytes(), "image/png")})
-    assert response.status_code == 200
-    assert response.json() == {"digit": 7, "confidence": 0.98, "latency_ms": 1.25}
-
-
-def test_non_image_is_rejected() -> None:
-    client = TestClient(create_app(predictor=StubPredictor()))
-    response = client.post("/api/v1/predict", files={"file": ("bad.txt", b"bad", "text/plain")})
-    assert response.status_code == 415
-```
-
-- [ ] **Step 2: Run tests and verify the API module is missing**
-
-Run: `python -m pytest tests/api/test_app.py -v`
-
-Expected: FAIL importing `digit_recognizer.api.app`.
-
-- [ ] **Step 3: Implement schemas and application factory**
-
-```python
-# src/digit_recognizer/api/schemas.py
-from pydantic import BaseModel
-
-
-class HealthResponse(BaseModel):
-    status: str
-    model_loaded: bool
-
-
-class PredictionResponse(BaseModel):
-    digit: int
-    confidence: float
-    latency_ms: float
-```
-
-`app.py` must use `create_app(predictor: Predictor | None = None)`, load the default model during lifespan when no predictor is injected, mount the packaged Web directory, and enforce:
-
-- content type in `image/png` or `image/jpeg`;
-- maximum body size of 2 MiB;
-- malformed image -> HTTP 400;
-- blank image -> HTTP 422;
-- missing model -> HTTP 503;
-- no filesystem path or traceback in responses.
-
-The response is built only from `Prediction.digit`, `confidence`, and `latency_ms`. `main()` runs `uvicorn.run("digit_recognizer.api.app:create_app", factory=True, host="0.0.0.0", port=8000)`.
-
-- [ ] **Step 4: Implement the three-file Web page**
-
-Use a 280x280 white `<canvas>`, pointer events with a 15-pixel round black stroke, and two buttons. On recognition, convert the canvas to a PNG `Blob`, submit `FormData` to `/api/v1/predict`, and display the digit, confidence percentage, and latency. On non-2xx responses, display the API `detail` message. No framework or build step is allowed.
-
-- [ ] **Step 5: Run API tests and a local smoke test**
-
-Run: `python -m pytest tests/api/test_app.py -v`
-
-Expected: both tests PASS.
-
-Run: `python -m uvicorn digit_recognizer.api.app:create_app --factory --host 127.0.0.1 --port 8000`
-
-Expected: `GET http://127.0.0.1:8000/health` returns HTTP 200 with `model_loaded: true`, and `/` displays the drawing page.
-
-- [ ] **Step 6: Commit API and Web**
-
-```bash
-git add src/digit_recognizer/api src/digit_recognizer/web tests/api
-git commit -m "feat: add FastAPI and browser demo"
-```
-
-### Task 6: Refactor the offline PyQt desktop client
-
-**Files:**
 - Create: `src/digit_recognizer/desktop/app.py`
 - Test: `tests/desktop/test_canvas.py`
+- Modify: `pyproject.toml`（仅桌面依赖和 `digit-desktop` 入口）
 
-- [ ] **Step 1: Write the offscreen canvas conversion test**
+- [ ] 先写 offscreen 失败测试：画板初始白色、转换为 280×280 PIL 图像。
+- [ ] 实现 `DrawingCanvas`：自身坐标绘制、15 px 黑色圆角笔迹、`clear()`、内存转换 PIL。
+- [ ] 测试清除和笔迹坐标，不启动真实窗口事件循环。
+- [ ] 实现 `DigitRecognizerWindow`：注入 Predictor，显示数字、置信度和耗时。
+- [ ] 测试识别成功、空白输入和推理错误的 UI 状态/提示映射。
+- [ ] `main()` 使用 `default_model_path()` 加载模型；加载失败显示简洁错误并返回 1。
+- [ ] 执行：
 
-```python
-# tests/desktop/test_canvas.py
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PyQt5.QtWidgets import QApplication
-
-from digit_recognizer.desktop.app import DrawingCanvas
-
-
-def test_canvas_starts_blank_and_converts_to_pil() -> None:
-    app = QApplication.instance() or QApplication([])
-    canvas = DrawingCanvas()
-    image = canvas.to_pil()
-    assert image.size == (280, 280)
-    assert image.convert("L").getextrema() == (255, 255)
-    assert app is not None
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'
+.\.venv\Scripts\python.exe -m pytest tests\desktop -v
+.\.venv\Scripts\python.exe -m ruff check src\digit_recognizer\desktop tests\desktop
 ```
 
-- [ ] **Step 2: Run test and verify desktop module is missing**
+- [ ] 人工冒烟：启动 `digit-desktop`，验证绘制、清除、空白拒绝、识别和关闭。
+- [ ] 规格与质量审查通过后提交：
 
-Run: `python -m pytest tests/desktop/test_canvas.py -v`
-
-Expected: FAIL importing `digit_recognizer.desktop.app`.
-
-- [ ] **Step 3: Implement the desktop application**
-
-`DrawingCanvas(QLabel)` owns a 280x280 `QImage`, handles mouse events in its own coordinate system, paints round black 15-pixel lines, exposes `clear()` and converts to PIL through an in-memory PNG `QBuffer`.
-
-`DigitRecognizerWindow(QWidget)` receives a `Predictor`, owns the canvas, clear/recognize buttons, result label, and confidence/latency label. `recognize()` catches `BlankImageError` and shows an informational message; unexpected inference errors show a critical message without a traceback.
-
-`main()` creates `QApplication`, loads `Predictor` from `default_model_path()`, shows a critical startup dialog and exits with code 1 on `ModelLoadError`, otherwise shows the window and returns the Qt event-loop code.
-
-- [ ] **Step 4: Run the desktop test and manually smoke-test drawing**
-
-Run: `$env:QT_QPA_PLATFORM='offscreen'; python -m pytest tests/desktop/test_canvas.py -v`
-
-Expected: PASS.
-
-Run: `digit-desktop`
-
-Expected: the window opens, drawing follows the pointer without coordinate offset, blank recognition is rejected, and a drawn digit returns a prediction.
-
-- [ ] **Step 5: Commit desktop client**
-
-```bash
-git add src/digit_recognizer/desktop tests/desktop
+```powershell
+git add pyproject.toml src/digit_recognizer/desktop tests/desktop
 git commit -m "feat: add offline PyQt desktop client"
 ```
 
-### Task 7: Add Docker, CI, and Windows Release automation
+### Task 6：增加 CI 与 Windows 打包
 
-**Files:**
-- Create: `Dockerfile`
-- Create: `.dockerignore`
+**文件：**
+
 - Create: `packaging/windows.spec`
 - Create: `.github/workflows/quality.yml`
 - Create: `.github/workflows/release.yml`
 
-- [ ] **Step 1: Add the CPU API image**
+- [ ] PyInstaller 使用 onedir，不使用 onefile。
+- [ ] 包含 `models/mnist_cnn.pth` 与必要 Qt/PyTorch 运行依赖，不包含 MNIST、训练数据、测试和报告源码。
+- [ ] `console=False`，产物目录名为 `HandwrittenDigitRecognizer`。
+- [ ] quality workflow 使用 Python 3.11 和 CPU PyTorch，执行 Ruff、pytest、包构建与桌面模块导入检查。
+- [ ] release workflow 在 `v*` 标签使用 `windows-latest` 构建 ZIP，并上传 GitHub Release。
+- [ ] 本地执行：
 
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-COPY pyproject.toml README.md LICENSE ./
-COPY src ./src
-COPY models ./models
-RUN python -m pip install --no-cache-dir torch==2.3.1 torchvision==0.18.1 \
-      --index-url https://download.pytorch.org/whl/cpu \
-    && python -m pip install --no-cache-dir ".[api]"
-EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
-CMD ["uvicorn", "digit_recognizer.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+```powershell
+.\.venv\Scripts\python.exe -m pip install pyinstaller
+.\.venv\Scripts\pyinstaller.exe packaging\windows.spec --clean --noconfirm
 ```
 
-`.dockerignore` excludes `.git`, `.github`, `.worktrees`, `.venv`, caches, `data`, `build`, `dist`, tests, docs, and `reports`.
+- [ ] 启动 `dist\HandwrittenDigitRecognizer\HandwrittenDigitRecognizer.exe` 完成人工冒烟。
+- [ ] 不提交 `build/`、`dist/` 或解压后的运行目录。
+- [ ] 审查通过后提交 CI 与打包配置。
 
-- [ ] **Step 2: Add the onedir Windows build**
+### Task 7：生成可信 README、截图和简历材料
 
-`packaging/windows.spec` analyzes `src/digit_recognizer/desktop/app.py` with `pathex=["src"]`, includes `models/mnist_cnn.pth` under `models`, sets `console=False`, and produces a directory named `HandwrittenDigitRecognizer`. Do not use onefile mode and do not include MNIST or training dependencies.
+**文件：**
 
-- [ ] **Step 3: Add quality workflow**
-
-`.github/workflows/quality.yml` runs on pushes and pull requests using Python 3.11. It installs CPU torch/torchvision, then `.[api,desktop,dev]`, runs `ruff check .`, runs pytest with `QT_QPA_PLATFORM=offscreen`, imports `create_app`, and runs `docker build -t handwritten-digit-recognition:test .` in a separate job.
-
-- [ ] **Step 4: Add tagged release workflow**
-
-`.github/workflows/release.yml` runs on tags matching `v*`, uses `windows-latest`, installs Python 3.11, `.[desktop]`, and PyInstaller, runs `pyinstaller packaging/windows.spec --clean --noconfirm`, compresses `dist/HandwrittenDigitRecognizer` to `HandwrittenDigitRecognizer-windows-x64.zip`, and publishes it with `softprops/action-gh-release@v2` using `GITHUB_TOKEN`.
-
-- [ ] **Step 5: Verify locally**
-
-Run: `docker build -t handwritten-digit-recognition:local .`
-
-Expected: build succeeds.
-
-Run: `docker run --rm -d --name digit-api-test -p 8000:8000 handwritten-digit-recognition:local`
-
-Expected: container becomes healthy and `/health` reports the model loaded. Stop it with `docker stop digit-api-test`.
-
-Run: `python -m pip install pyinstaller && pyinstaller packaging/windows.spec --clean --noconfirm`
-
-Expected: `dist/HandwrittenDigitRecognizer/HandwrittenDigitRecognizer.exe` exists and starts.
-
-- [ ] **Step 6: Commit delivery automation**
-
-```bash
-git add Dockerfile .dockerignore packaging .github
-git commit -m "ci: add container and Windows release pipelines"
-```
-
-### Task 8: Generate truthful README and resume material
-
-**Files:**
 - Modify: `README.md`
 - Create: `docs/resume-project.md`
-- Create: `scripts/sync_docs.py`
 - Create: `docs/images/desktop.png`
-- Create: `docs/images/web.png`
+- Create: `scripts/sync_docs.py`
 - Test: `tests/test_documentation.py`
 
-- [ ] **Step 1: Write documentation consistency test**
+- [ ] 先写文档一致性测试：README 与简历中的准确率、median、P95 必须等于 `reports/metrics.json`。
+- [ ] `sync_docs.py` 从 JSON 模板化生成数字，禁止手填量化结果。
+- [ ] README 包含英文短简介、中文正文、架构、桌面启动、训练/测试、真实评测、局限和 Release。
+- [ ] 只拍一张干净的 PyQt 桌面截图，不创建 Web 截图。
+- [ ] 简历项目固定三条：共享核心与 PyQt、可复现评测、测试/CI/Windows 交付。
+- [ ] 如实说明课程项目来源、本人主导实现和单数字 MNIST 局限。
+- [ ] 文档不得出现成员学号、教师信息、绝对路径或终端隐私。
 
-```python
-# tests/test_documentation.py
-import json
-from pathlib import Path
+### Task 8：最终验证与首版发布
 
+- [ ] 运行全部质量门：
 
-def test_documented_metrics_match_generated_metrics() -> None:
-    metrics = json.loads(Path("reports/metrics.json").read_text(encoding="utf-8"))
-    readme = Path("README.md").read_text(encoding="utf-8")
-    resume = Path("docs/resume-project.md").read_text(encoding="utf-8")
-    accuracy = f"{metrics['test_accuracy'] * 100:.2f}%"
-    median = f"{metrics['latency_ms']['median']:.2f} ms"
-    p95 = f"{metrics['latency_ms']['p95']:.2f} ms"
-    for document in (readme, resume):
-        assert accuracy in document
-        assert median in document
-        assert p95 in document
+```powershell
+.\.venv\Scripts\python.exe -m ruff check .
+$env:QT_QPA_PLATFORM='offscreen'
+.\.venv\Scripts\python.exe -m pytest -v
+.\.venv\Scripts\python.exe -m build
 ```
 
-- [ ] **Step 2: Implement deterministic documentation synchronization**
+- [ ] 重新计算权重 SHA-256，验证元数据、参数量、准确率和文档数字一致。
+- [ ] 启动源码桌面端与打包 EXE，验证完整离线识别闭环。
+- [ ] 检查 Git 仅跟踪必要源码、模型、报告和文档；排除数据、缓存、原报告和构建目录。
+- [ ] 搜索凭据、个人信息和绝对本机路径，结果必须为空。
+- [ ] 提交所有必要变更；工作树干净后再推送 feature 分支并创建 PR。
+- [ ] PR 检查通过后合并，创建 `v0.1.0` 标签并验证 Windows ZIP Release。
 
-`scripts/sync_docs.py` reads `reports/metrics.json` and writes both documents from fixed UTF-8 templates. It formats test accuracy to two percentage decimals and median/P95 to two milliseconds. The README template must contain:
+## 完成定义
 
-- a five-line English overview;
-- Chinese project positioning and verified metric table;
-- architecture and shared-core data flow;
-- local API, Docker, Web, and desktop quick starts;
-- curl request example and exact response keys;
-- training, testing, and lint commands;
-- screenshots and links to the two report PNGs;
-- truthful course-project origin and personal contribution;
-- limitations: one digit, MNIST, no production OCR claim;
-- MIT License.
+以下条件同时满足才算首版闭环：
 
-The resume template must contain project name, technology stack, GitHub URL, and exactly three bullets covering shared-core architecture, reproducible evaluation, and FastAPI/Docker/PyQt delivery. Quantitative claims are inserted only from the metrics JSON.
-
-- [ ] **Step 3: Capture the two screenshots and generate docs**
-
-Run the API/Web and desktop clients, capture one clean screenshot of each, and save them as the exact PNG paths listed above. Do not include desktop paths, usernames, terminals, or personal data in either image.
-
-Run: `python scripts/sync_docs.py`
-
-Expected: the script prints `Documentation synchronized from reports/metrics.json` and writes both documents with actual measured values.
-
-- [ ] **Step 4: Run documentation test**
-
-Run: `python -m pytest tests/test_documentation.py -v`
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit portfolio documentation**
-
-```bash
-git add README.md docs/resume-project.md docs/images scripts/sync_docs.py tests/test_documentation.py
-git commit -m "docs: add verified project and resume documentation"
-```
-
-### Task 9: Perform final verification and prepare the first release
-
-**Files:**
-- Modify only files implicated by verification failures.
-
-- [ ] **Step 1: Run all local quality gates**
-
-Run: `python -m ruff check .`
-
-Expected: `All checks passed!`.
-
-Run: `$env:QT_QPA_PLATFORM='offscreen'; python -m pytest -v`
-
-Expected: all tests PASS with zero skipped tests required by this plan.
-
-Run: `python -m build`
-
-Expected: source distribution and wheel build successfully.
-
-- [ ] **Step 2: Validate quantitative artifact consistency**
-
-Run a Python check that recomputes the SHA-256 of `models/mnist_cnn.pth`, compares it with `models/model_metadata.json`, verifies parameter count `585578`, verifies test accuracy at least `0.99`, and verifies the README/resume values equal `reports/metrics.json`.
-
-Expected: command exits 0 and prints `artifact consistency verified`.
-
-- [ ] **Step 3: Validate both delivery paths**
-
-Run the Docker health/prediction smoke test with a generated nonblank PNG and verify HTTP 200 with digit 0-9, confidence 0-1, and nonnegative latency.
-
-Launch the packaged Windows executable and manually verify draw, clear, blank rejection, prediction, and clean shutdown.
-
-- [ ] **Step 4: Review repository hygiene and secrets**
-
-Run: `git status --short`
-
-Expected: clean after committing fixes.
-
-Run: `git ls-files`
-
-Expected: no `.idea`, cache, MNIST data, original reports, original PPT, ZIP, EXE, `build`, `dist`, or `.worktrees` entries.
-
-Search tracked text for the original student number, teacher name, absolute `E:\` paths, tokens, passwords, and private keys.
-
-Expected: no matches.
-
-- [ ] **Step 5: Make the verification commit**
-
-```bash
-git add -A
-git commit -m "chore: complete release verification"
-```
-
-If no files changed after verification, do not create an empty commit.
-
-- [ ] **Step 6: Push only after all gates pass**
-
-```bash
-git push -u origin feature/one-day-rebuild
-```
-
-Open a pull request into `main`, verify GitHub Actions, and merge it:
-
-```bash
-gh pr create --base main --head feature/one-day-rebuild --title "Rebuild handwritten digit recognition portfolio project" --body "Implements the approved one-day rebuild specification."
-gh pr checks --watch
-gh pr merge --squash --delete-branch
-```
-
-After the merge, create the release tag from the updated primary worktree, where `main` is already checked out:
-
-```bash
-git -C "E:\csdiy\项目重构\Handwritten-digit-recognition" pull --ff-only origin main
-git -C "E:\csdiy\项目重构\Handwritten-digit-recognition" tag -a v0.1.0 -m "First portfolio-ready release"
-git -C "E:\csdiy\项目重构\Handwritten-digit-recognition" push origin v0.1.0
-```
-
-Expected: the Release workflow attaches `HandwrittenDigitRecognizer-windows-x64.zip`. If the workflow fails, keep the tag history intact, fix the workflow on a new commit, and publish a new patch tag rather than claiming the Release succeeded.
+1. 正式模型准确率 ≥99.0%，六类产物一致且可核验。
+2. PyQt 源码版和 Windows 打包版均可离线完成一次识别。
+3. 全量测试、Ruff、包构建和 CI 通过。
+4. README、桌面截图和简历材料只引用真实评测数据。
+5. GitHub 仓库无后端/Web/Docker实现，也无隐私、数据集或构建垃圾。
