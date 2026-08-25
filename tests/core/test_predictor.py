@@ -80,10 +80,13 @@ def test_environment_model_path_wins_over_frozen_path(
     assert default_model_path() == configured
 
 
-def test_development_default_model_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_development_default_model_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv("DIGIT_MODEL_PATH", raising=False)
     monkeypatch.setattr("sys.frozen", False, raising=False)
     monkeypatch.delattr("sys._MEIPASS", raising=False)
+    monkeypatch.chdir(tmp_path)
 
     expected = Path(__file__).resolve().parents[2] / "models" / "mnist_cnn.pth"
 
