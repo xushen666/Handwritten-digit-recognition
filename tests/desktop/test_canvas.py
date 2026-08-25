@@ -121,6 +121,41 @@ def test_window_maps_unexpected_inference_error_without_leaking_details(
     assert secret not in str(shown)
 
 
+def test_main_smoke_test_loads_window_without_starting_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+
+    class FakeApplication:
+        def __init__(self, arguments: list[str]) -> None:
+            calls["arguments"] = arguments
+
+        def setStyle(self, style: str) -> None:
+            calls["style"] = style
+
+        def exec_(self) -> int:
+            raise AssertionError("smoke test must not enter the event loop")
+
+    class FakeWindow:
+        def __init__(self, predictor: object) -> None:
+            calls["predictor"] = predictor
+
+        def show(self) -> None:
+            raise AssertionError("smoke test must not show the window")
+
+    expected_predictor = object()
+    monkeypatch.setattr(desktop_app, "QApplication", FakeApplication)
+    monkeypatch.setattr(desktop_app, "DigitRecognizerWindow", FakeWindow)
+    monkeypatch.setattr(desktop_app, "default_model_path", lambda: "model-path")
+    monkeypatch.setattr(desktop_app.Predictor, "load", lambda _path: expected_predictor)
+
+    arguments = ["HandwrittenDigitRecognizer.exe", "--smoke-test"]
+    assert desktop_app.main(arguments) == 0
+    assert calls["arguments"] == arguments
+    assert calls["style"] == "Fusion"
+    assert calls["predictor"] is expected_predictor
+
+
 def test_main_uses_fusion_and_returns_event_loop_code(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {}
 

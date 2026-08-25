@@ -130,8 +130,9 @@ class DigitRecognizerWindow(QWidget):
         self.latency_label.setText(f"推理耗时：{prediction.latency_ms:.2f} ms")
 
 
-def main() -> int:
-    application = QApplication(sys.argv)
+def main(arguments: list[str] | None = None) -> int:
+    application_arguments = sys.argv if arguments is None else arguments
+    application = QApplication(application_arguments)
     application.setStyle("Fusion")
     try:
         predictor = Predictor.load(default_model_path())
@@ -144,6 +145,8 @@ def main() -> int:
         return 1
 
     window = DigitRecognizerWindow(predictor)
+    if "--smoke-test" in application_arguments[1:]:
+        return 0
     window.show()
     return int(application.exec_())
 
