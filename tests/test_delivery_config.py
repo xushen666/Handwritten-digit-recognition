@@ -59,7 +59,7 @@ def test_quality_workflow_runs_the_desktop_quality_gates() -> None:
     assert "https://download.pytorch.org/whl/cpu" in normalized
     assert '"torch>=2.10,<2.12"' in normalized
     assert '"torchvision>=0.25,<0.27"' in normalized
-    assert '.[desktop,dev]' in normalized
+    assert '.[desktop,train,dev]' in normalized
     assert "qt_qpa_platform: offscreen" in normalized
     for quality_gate in (
         "python -m ruff check .",
@@ -79,7 +79,7 @@ def test_release_workflow_builds_a_windows_zip_for_version_tags() -> None:
     assert "tags:" in normalized and "v*" in normalized
     assert "python-version: \"3.11\"" in normalized
     assert "https://download.pytorch.org/whl/cpu" in normalized
-    assert '.[desktop,dev]' in normalized
+    assert '.[desktop,train,dev]' in normalized
     assert "pyinstaller" in normalized
     assert "packaging/windows.spec --clean --noconfirm" in normalized
     assert "compress-archive" in normalized

@@ -28,7 +28,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.10,<2.12" "torchvision>=0.25,<0.27"
-          python -m pip install -e ".[desktop,dev]"
+          python -m pip install -e ".[desktop,train,dev]"
 
       - name: Lint
         run: python -m ruff check .
