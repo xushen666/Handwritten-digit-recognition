@@ -54,6 +54,24 @@ def test_sync_check_accepts_current_documents_without_writing() -> None:
     assert (README_PATH.read_bytes(), RESUME_PATH.read_bytes()) == before
 
 
+def test_sync_check_accepts_windows_line_endings_without_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    readme, resume = sync_docs._render_documents()
+    readme_path = tmp_path / "README.md"
+    resume_path = tmp_path / "docs" / "resume-project.md"
+    resume_path.parent.mkdir(parents=True)
+    readme_path.write_text(readme, encoding="utf-8", newline="\r\n")
+    resume_path.write_text(resume, encoding="utf-8", newline="\r\n")
+    before = (readme_path.read_bytes(), resume_path.read_bytes())
+    monkeypatch.setattr(sync_docs, "ROOT", tmp_path)
+    monkeypatch.setattr(sync_docs, "README_PATH", readme_path)
+    monkeypatch.setattr(sync_docs, "RESUME_PATH", resume_path)
+
+    assert sync_docs.main(["--check"]) == 0
+    assert (readme_path.read_bytes(), resume_path.read_bytes()) == before
+
+
 def test_sync_check_rejects_stale_documents_without_writing() -> None:
     original_readme = README_PATH.read_bytes()
     original_resume = RESUME_PATH.read_bytes()

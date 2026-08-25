@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         stale_paths = [
             path.relative_to(ROOT).as_posix()
             for path, expected in ((README_PATH, readme), (RESUME_PATH, resume))
-            if not path.is_file() or path.read_bytes() != expected.encode("utf-8")
+            if not path.is_file() or path.read_text(encoding="utf-8") != expected
         ]
         if stale_paths:
             print(f"Documentation is out of date: {', '.join(stale_paths)}", file=sys.stderr)
