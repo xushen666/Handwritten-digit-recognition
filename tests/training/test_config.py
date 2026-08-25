@@ -145,9 +145,35 @@ def test_train_writes_complete_artifacts_and_iterates_test_once(
     label_batch = torch.zeros(1, dtype=torch.long)
     test_loader = TrackingLoader([(input_batch, label_batch)])
     loaders = (TrackingLoader([]), TrackingLoader([]), test_loader)
-    epoch_results = iter([(0.4, 0.8), (0.3, 0.9)])
+    epoch_results = iter([(0.4, 0.8), (0.3, 0.9), (0.2, 0.85), (0.35, 0.8)])
+    training_states = iter([1.0, 2.0])
+    evaluated_state: dict[str, float] = {}
+
+    def fake_run_epoch(
+        model: nn.Module,
+        loader: TrackingLoader,
+        loss_function: nn.Module,
+        device: torch.device,
+        optimizer: torch.optim.Optimizer | None = None,
+    ) -> tuple[float, float]:
+        if optimizer is not None:
+            with torch.no_grad():
+                next(model.parameters()).fill_(next(training_states))
+        return next(epoch_results)
+
+    def fake_final_evaluation(
+        model: nn.Module,
+        loader: TrackingLoader,
+        loss_function: nn.Module,
+        device: torch.device,
+    ) -> tuple[float, float, list[list[int]], torch.Tensor]:
+        evaluated_state["parameter"] = float(next(model.parameters()).detach().flatten()[0])
+        list(loader)
+        return 0.02, 0.995, [[0] * 10 for _ in range(10)], input_batch
+
     monkeypatch.setattr(runner, "build_loaders", lambda config, data_dir: loaders)
-    monkeypatch.setattr(runner, "run_epoch", lambda *args, **kwargs: next(epoch_results))
+    monkeypatch.setattr(runner, "run_epoch", fake_run_epoch)
+    monkeypatch.setattr(runner, "_evaluate_final", fake_final_evaluation)
     monkeypatch.setattr(runner, "benchmark", lambda *args, **kwargs: {"median": 1.0, "p95": 2.0})
     monkeypatch.setattr(
         runner,
@@ -161,9 +187,10 @@ def test_train_writes_complete_artifacts_and_iterates_test_once(
     )
     models_dir = tmp_path / "models"
     reports_dir = tmp_path / "reports"
+    config = TrainingConfig(epochs=2)
 
     metrics = runner.train(
-        TrainingConfig(epochs=1),
+        config,
         tmp_path / "data",
         models_dir,
         reports_dir,
@@ -171,6 +198,7 @@ def test_train_writes_complete_artifacts_and_iterates_test_once(
     )
 
     assert test_loader.iterations == 1
+    assert evaluated_state["parameter"] == 1.0
     assert json.loads((reports_dir / "metrics.json").read_text(encoding="utf-8")) == metrics
     for filename in (
         "history.json",
@@ -181,7 +209,13 @@ def test_train_writes_complete_artifacts_and_iterates_test_once(
         assert (reports_dir / filename).is_file()
     model_path = models_dir / "mnist_cnn.pth"
     metadata = json.loads((models_dir / "model_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["version"] == "0.1.0"
+    assert metadata["input_shape"] == [1, 28, 28]
     assert metadata["classes"] == list(range(10))
+    assert metadata["parameter_count"] == 585_578
+    assert metadata["configuration"] == config.to_dict()
+    assert metadata["test_accuracy"] == 0.995
+    assert metadata["latency_ms"] == {"median": 1.0, "p95": 2.0}
     assert metadata["sha256"] == hashlib.sha256(model_path.read_bytes()).hexdigest()
 
 
