@@ -1,3 +1,3 @@
 # Handwritten Digit Recognition
 
-Portfolio reconstruction with a shared PyTorch core, FastAPI/Web delivery, and an offline PyQt client. Verified metrics and full Chinese documentation will follow reproducible retraining.
+Portfolio-oriented reconstruction of an MNIST recognizer with a shared PyTorch core, FastAPI/Web delivery, and an offline PyQt client. Verified metrics and full Chinese usage documentation are generated after reproducible retraining.
