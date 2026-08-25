@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "handwritten-digit-recognition"
+version = "0.1.0"
+description = "Handwritten digit recognition portfolio reconstruction"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+authors = [{ name = "xushen666" }]
+dependencies = [
+    "numpy>=1.26,<3",
+    "pillow>=10,<12",
+    "torch>=2.3,<3",
+    "torchvision>=0.18,<1",
+]
+
+[project.optional-dependencies]
+api = ["fastapi", "python-multipart", "uvicorn"]
+desktop = ["PyQt5"]
+train = ["matplotlib"]
+dev = ["build", "httpx", "pytest", "ruff"]
+all = [
+    "handwritten-digit-recognition[api]",
+    "handwritten-digit-recognition[desktop]",
+    "handwritten-digit-recognition[train]",
+]
+
+[project.scripts]
+digit-api = "digit_recognizer.api:main"
+digit-desktop = "digit_recognizer.desktop:main"
+digit-train = "digit_recognizer.training:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+digit_recognizer = ["web/*.html", "web/*.js", "web/*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+lint.select = ["E", "F", "I", "B", "UP"]
+
