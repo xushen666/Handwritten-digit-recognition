@@ -4,13 +4,23 @@ from typing import TypeAlias
 
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
+from torchvision.transforms import v2
 
 from .errors import BlankImageError, InvalidImageError
 
 ImageInput: TypeAlias = Image.Image | np.ndarray
 INK_RATIO_THRESHOLD = 0.002
 _IMAGE_SIZE = (28, 28)
+
+_transform = v2.Compose(
+    [
+        v2.Resize(_IMAGE_SIZE, antialias=True),
+        v2.ToImage(),
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=[0.5], std=[0.5]),
+    ]
+)
 
 
 def _as_pil_image(image: ImageInput) -> Image.Image:
@@ -24,22 +34,31 @@ def _as_pil_image(image: ImageInput) -> Image.Image:
         raise InvalidImageError("NumPy image must have 3 or 4 channels")
     if image.size == 0:
         raise InvalidImageError("image must not be empty")
-    if not np.issubdtype(image.dtype, np.number):
+    if np.issubdtype(image.dtype, np.complexfloating) or not np.issubdtype(
+        image.dtype, np.number
+    ):
         raise InvalidImageError("NumPy image must contain numeric values")
 
     values = np.asarray(image)
+    if not np.all(np.isfinite(values)) or np.any(values < 0) or np.any(values > 255):
+        raise InvalidImageError("NumPy image values must be finite and within [0, 255]")
     if np.issubdtype(values.dtype, np.floating):
-        values = values * 255 if np.nanmax(values) <= 1 else values
-    values = np.clip(values, 0, 255).astype(np.uint8)
+        if np.all(values <= 1):
+            values = values * 255
+        values = np.rint(values)
+    values = values.astype(np.uint8)
     try:
         return Image.fromarray(values)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, UnidentifiedImageError) as exc:
         raise InvalidImageError("could not decode NumPy image") from exc
 
 
 def to_grayscale(image: ImageInput) -> Image.Image:
     """Convert a supported PIL or NumPy image to an 8-bit grayscale PIL image."""
-    return _as_pil_image(image).convert("L")
+    try:
+        return _as_pil_image(image).convert("L")
+    except (TypeError, ValueError, UnidentifiedImageError) as exc:
+        raise InvalidImageError("image could not be decoded") from exc
 
 
 def is_blank(image: ImageInput) -> bool:
@@ -59,7 +78,5 @@ def prepare_image(
     if reject_blank and is_blank(grayscale):
         raise BlankImageError("image is blank")
 
-    resized = grayscale.resize(_IMAGE_SIZE, Image.Resampling.LANCZOS)
-    pixels = np.asarray(resized, dtype=np.float32) / 255.0
-    tensor = torch.from_numpy(1.0 - pixels).unsqueeze(0).unsqueeze(0)
-    return (tensor - 0.5) / 0.5
+    inverted = Image.eval(grayscale, lambda value: 255 - value)
+    return _transform(inverted).unsqueeze(0)

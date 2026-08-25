@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import torch
 from PIL import Image, ImageDraw
+from torchvision.transforms import v2
 
 from digit_recognizer.core.errors import BlankImageError, InvalidImageError
 from digit_recognizer.core.preprocessing import is_blank, prepare_image
@@ -33,3 +34,52 @@ def test_four_dimensional_numpy_array_is_rejected() -> None:
 
     with pytest.raises(InvalidImageError):
         prepare_image(image)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        np.array([[np.nan]]),
+        np.array([[np.inf]]),
+        np.array([[-1.0]]),
+        np.array([[256.0]]),
+        np.array([[1 + 2j]]),
+    ],
+)
+def test_invalid_numpy_values_are_rejected(values: np.ndarray) -> None:
+    with pytest.raises(InvalidImageError):
+        prepare_image(values)
+
+
+def test_float_numpy_values_in_unit_interval_are_supported() -> None:
+    image = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.float32)
+
+    result = prepare_image(image, reject_blank=False)
+
+    assert result.shape == (1, 1, 28, 28)
+
+
+def test_closed_pil_image_is_rejected() -> None:
+    image = Image.new("L", (28, 28), 255)
+    image.close()
+
+    with pytest.raises(InvalidImageError):
+        prepare_image(image)
+
+
+def test_prepare_image_matches_torchvision_v2_pipeline() -> None:
+    image = Image.new("RGB", (17, 23), "white")
+    ImageDraw.Draw(image).ellipse((2, 4, 14, 19), fill="black")
+
+    expected_transform = v2.Compose(
+        [
+            v2.Resize((28, 28), antialias=True),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.5], std=[0.5]),
+        ]
+    )
+    inverted = Image.eval(image.convert("L"), lambda value: 255 - value)
+    expected = expected_transform(inverted).unsqueeze(0)
+
+    torch.testing.assert_close(prepare_image(image), expected)
