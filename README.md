@@ -40,7 +40,7 @@ digit-desktop
 ## 训练与质量检查
 
 ```powershell
-python -m pip install -e ".[train,dev]"
+python -m pip install -e ".[desktop,train,dev]"
 python scripts/train.py --device auto --epochs 15
 python -m pytest -v
 python -m ruff check .

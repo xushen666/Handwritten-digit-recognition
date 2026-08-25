@@ -201,6 +201,7 @@ def test_readme_describes_the_desktop_delivery_and_real_reports() -> None:
         assert required in readme
     assert "离线桌面应用" in readme
     assert "后端服务" in readme
+    assert 'python -m pip install -e ".[desktop,train,dev]"' in readme
 
 
 def test_public_documents_do_not_advertise_removed_delivery_surfaces() -> None:
