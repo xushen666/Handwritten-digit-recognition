@@ -1,0 +1,35 @@
+{
+  "version": "0.1.0",
+  "input_shape": [
+    1,
+    28,
+    28
+  ],
+  "classes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "parameter_count": 585578,
+  "configuration": {
+    "seed": 42,
+    "validation_size": 5000,
+    "batch_size": 256,
+    "epochs": 15,
+    "learning_rate": 0.001,
+    "num_workers": 0
+  },
+  "test_accuracy": 0.9957,
+  "latency_ms": {
+    "median": 2.6332500001444714,
+    "p95": 3.381845000603788
+  },
+  "sha256": "16688416559c16ef42dc1fa98e7a897f841af664148e7ec8419bfc83de4aaf6d"
+}
