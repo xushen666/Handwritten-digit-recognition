@@ -1,3 +1,5 @@
+from io import BytesIO
+
 import numpy as np
 import pytest
 import torch
@@ -83,3 +85,51 @@ def test_prepare_image_matches_torchvision_v2_pipeline() -> None:
     expected = expected_transform(inverted).unsqueeze(0)
 
     torch.testing.assert_close(prepare_image(image), expected)
+
+
+def test_zero_size_pil_image_is_rejected() -> None:
+    image = Image.new("L", (0, 10))
+
+    with pytest.raises(InvalidImageError):
+        prepare_image(image)
+
+
+def test_truncated_lazy_pil_image_is_rejected() -> None:
+    source = Image.new("L", (28, 28), 255)
+    output = BytesIO()
+    source.save(output, format="PNG")
+    image = Image.open(BytesIO(output.getvalue()[:-40]))
+
+    with pytest.raises(InvalidImageError):
+        prepare_image(image)
+
+
+def test_fully_transparent_black_rgba_is_blank() -> None:
+    image = Image.new("RGBA", (28, 28), (0, 0, 0, 0))
+    array = np.zeros((28, 28, 4), dtype=np.uint8)
+
+    assert is_blank(image)
+    assert is_blank(array)
+
+
+def test_semi_transparent_black_stroke_composites_on_white() -> None:
+    rgba = Image.new("RGBA", (28, 28), (255, 255, 255, 255))
+    ImageDraw.Draw(rgba).line((5, 5, 22, 22), fill=(0, 0, 0, 128), width=3)
+    expected = Image.new("RGB", (28, 28), "white")
+    expected.paste(rgba.convert("RGB"), mask=rgba.getchannel("A"))
+
+    torch.testing.assert_close(prepare_image(rgba), prepare_image(expected))
+
+
+def test_image_exceeding_pixel_cap_is_rejected() -> None:
+    image = Image.new("L", (2001, 2000), 255)
+
+    with pytest.raises(InvalidImageError):
+        prepare_image(image)
+
+
+def test_equivalent_float_and_uint8_inputs_match() -> None:
+    uint8_image = np.full((28, 28), 255, dtype=np.uint8)
+    uint8_image[8:20, 10:18] = 0
+
+    torch.testing.assert_close(prepare_image(uint8_image), prepare_image(uint8_image / 255.0))
