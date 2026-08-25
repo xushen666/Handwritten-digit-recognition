@@ -1,6 +1,8 @@
 import tomllib
 from pathlib import Path
 
+from setuptools import find_packages
+
 from digit_recognizer import __version__
 
 
@@ -18,3 +20,10 @@ def test_package_scope_is_desktop_only() -> None:
     assert "digit-api" not in scripts
     for backend_dependency in ("fastapi", "uvicorn", "python-multipart", "httpx"):
         assert backend_dependency not in serialized
+
+
+def test_package_discovery_excludes_server_interfaces() -> None:
+    discovered_packages = set(find_packages(where="src"))
+
+    assert "digit_recognizer.api" not in discovered_packages
+    assert "digit_recognizer.web" not in discovered_packages
