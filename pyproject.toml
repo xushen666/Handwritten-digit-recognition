@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "handwritten-digit-recognition"
 version = "0.1.0"
-description = "Handwritten digit recognition portfolio reconstruction"
+description = "Reproducible MNIST inference with FastAPI, Web, and PyQt clients"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 license = { text = "MIT" }
@@ -18,20 +18,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-api = ["fastapi", "python-multipart", "uvicorn"]
+api = ["fastapi", "python-multipart", "uvicorn[standard]"]
 desktop = ["PyQt5"]
 train = ["matplotlib"]
 dev = ["build", "httpx", "pytest", "ruff"]
-all = [
-    "handwritten-digit-recognition[api]",
-    "handwritten-digit-recognition[desktop]",
-    "handwritten-digit-recognition[train]",
-]
+all = ["fastapi", "python-multipart", "uvicorn[standard]", "PyQt5", "matplotlib"]
 
 [project.scripts]
-digit-api = "digit_recognizer.api:main"
-digit-desktop = "digit_recognizer.desktop:main"
-digit-train = "digit_recognizer.training:main"
+digit-api = "digit_recognizer.api.app:main"
+digit-desktop = "digit_recognizer.desktop.app:main"
+digit-train = "digit_recognizer.training.runner:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -44,9 +40,9 @@ digit_recognizer = ["web/*.html", "web/*.js", "web/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q"
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
 lint.select = ["E", "F", "I", "B", "UP"]
-
