@@ -31,6 +31,7 @@ def _formatted_metrics() -> tuple[str, str, str]:
 
 def test_sync_script_deterministically_generates_both_documents() -> None:
     assert SYNC_SCRIPT_PATH.is_file()
+    committed_documents = (README_PATH.read_bytes(), RESUME_PATH.read_bytes())
     first = subprocess.run(
         [sys.executable, str(SYNC_SCRIPT_PATH)],
         cwd=ROOT,
@@ -40,6 +41,7 @@ def test_sync_script_deterministically_generates_both_documents() -> None:
     )
     assert first.returncode == 0, first.stderr
     generated_once = (README_PATH.read_bytes(), RESUME_PATH.read_bytes())
+    assert generated_once == committed_documents
 
     second = subprocess.run(
         [sys.executable, str(SYNC_SCRIPT_PATH)],
@@ -110,6 +112,19 @@ def test_public_documents_do_not_advertise_removed_delivery_surfaces() -> None:
     for forbidden in ("fastapi", "uvicorn", "docker", "web", "curl"):
         assert forbidden not in documents
     assert not re.search(r"[a-z]:\\", documents)
+
+
+def test_documents_do_not_replace_exact_metrics_with_ambiguous_ranges() -> None:
+    documents = "\n".join(_read(path).lower() for path in (README_PATH, RESUME_PATH))
+    ambiguous_patterns = (
+        r"\d+(?:\.\d+)?%\s*\+",
+        r">=|以上",
+        r"\d+(?:\.\d+)?%\s*[-–—~～至到]\s*\d+(?:\.\d+)?%",
+        r"(?:约|大约|左右|≈|~)\s*\d+(?:\.\d+)?\s*ms",
+        r"\d+(?:\.\d+)?\s*ms\s*(?:左右|上下)",
+    )
+    for pattern in ambiguous_patterns:
+        assert not re.search(pattern, documents)
 
 
 def test_desktop_screenshot_exists() -> None:
