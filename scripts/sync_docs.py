@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import json
+import math
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,25 +22,78 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def _published_values() -> dict[str, str]:
-    metrics = _read_json(METRICS_PATH)
-    metadata = _read_json(METADATA_PATH)
-    if metrics.get("test_accuracy") != metadata.get("test_accuracy"):
+def _real_number(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a real number")
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
+def _accuracy(value: object, name: str) -> float:
+    result = _real_number(value, name)
+    if not 0 <= result <= 1:
+        raise ValueError(f"{name} must be between 0 and 1")
+    return result
+
+
+def _latency(value: object) -> tuple[float, float]:
+    if not isinstance(value, dict):
+        raise ValueError("latency_ms must be a JSON object")
+    median = _real_number(value.get("median"), "latency median")
+    p95 = _real_number(value.get("p95"), "latency p95")
+    if median < 0:
+        raise ValueError("latency median must be non-negative")
+    if p95 < 0:
+        raise ValueError("latency p95 must be non-negative")
+    if p95 < median:
+        raise ValueError("latency p95 must be greater than or equal to median")
+    return median, p95
+
+
+def _positive_integer(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return value
+
+
+def _format_published_values(
+    metrics: dict[str, Any], metadata: dict[str, Any]
+) -> dict[str, str]:
+    test_accuracy = _accuracy(metrics.get("test_accuracy"), "test_accuracy")
+    metadata_accuracy = _accuracy(metadata.get("test_accuracy"), "test_accuracy")
+    validation_accuracy = _accuracy(
+        metrics.get("best_validation_accuracy"), "best_validation_accuracy"
+    )
+    latency = _latency(metrics.get("latency_ms"))
+    metadata_latency = _latency(metadata.get("latency_ms"))
+    if test_accuracy != metadata_accuracy:
         raise ValueError("Published accuracy differs between metrics and model metadata")
-    if metrics.get("latency_ms") != metadata.get("latency_ms"):
+    if latency != metadata_latency:
         raise ValueError("Published latency differs between metrics and model metadata")
 
-    latency = metrics["latency_ms"]
-    configuration = metadata["configuration"]
+    parameter_count = _positive_integer(metadata.get("parameter_count"), "parameter_count")
+    configuration = metadata.get("configuration")
+    if not isinstance(configuration, dict):
+        raise ValueError("configuration must be a JSON object")
+    seed_value = configuration.get("seed")
+    if isinstance(seed_value, bool) or not isinstance(seed_value, int) or seed_value < 0:
+        raise ValueError("seed must be a non-negative integer")
+    epochs = _positive_integer(configuration.get("epochs"), "epochs")
     return {
-        "accuracy": f'{float(metrics["test_accuracy"]):.2%}',
-        "validation_accuracy": f'{float(metrics["best_validation_accuracy"]):.2%}',
-        "median": f'{float(latency["median"]):.2f} ms',
-        "p95": f'{float(latency["p95"]):.2f} ms',
-        "parameters": f'{int(metadata["parameter_count"]):,}',
-        "seed": str(int(configuration["seed"])),
-        "epochs": str(int(configuration["epochs"])),
+        "accuracy": f"{test_accuracy:.2%}",
+        "validation_accuracy": f"{validation_accuracy:.2%}",
+        "median": f"{latency[0]:.2f} ms",
+        "p95": f"{latency[1]:.2f} ms",
+        "parameters": f"{parameter_count:,}",
+        "seed": str(seed_value),
+        "epochs": str(epochs),
     }
+
+
+def _published_values() -> dict[str, str]:
+    return _format_published_values(_read_json(METRICS_PATH), _read_json(METADATA_PATH))
 
 
 def _render_readme(values: dict[str, str]) -> str:
@@ -73,7 +129,7 @@ PyQt 画板 -> 共享图像预处理 -> Predictor -> 数字、置信度、推理
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\\.venv\\Scripts\\Activate.ps1
 python -m pip install -e ".[desktop]"
 digit-desktop
 ```
@@ -158,12 +214,37 @@ def _render_resume(values: dict[str, str]) -> str:
 """
 
 
-def main() -> None:
+def _render_documents() -> tuple[str, str]:
     values = _published_values()
+    return _render_readme(values), _render_resume(values)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Synchronize generated portfolio documentation")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify generated documents without changing files",
+    )
+    args = parser.parse_args(argv)
+    readme, resume = _render_documents()
+
+    if args.check:
+        stale_paths = [
+            path.relative_to(ROOT).as_posix()
+            for path, expected in ((README_PATH, readme), (RESUME_PATH, resume))
+            if not path.is_file() or path.read_bytes() != expected.encode("utf-8")
+        ]
+        if stale_paths:
+            print(f"Documentation is out of date: {', '.join(stale_paths)}", file=sys.stderr)
+            return 1
+        return 0
+
     RESUME_PATH.parent.mkdir(parents=True, exist_ok=True)
-    README_PATH.write_text(_render_readme(values), encoding="utf-8", newline="\n")
-    RESUME_PATH.write_text(_render_resume(values), encoding="utf-8", newline="\n")
+    README_PATH.write_bytes(readme.encode("utf-8"))
+    RESUME_PATH.write_bytes(resume.encode("utf-8"))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
