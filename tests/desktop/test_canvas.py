@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -12,6 +13,14 @@ from digit_recognizer.core.errors import BlankImageError, ModelLoadError
 from digit_recognizer.core.predictor import Prediction
 from digit_recognizer.desktop import app as desktop_app
 from digit_recognizer.desktop.app import DigitRecognizerWindow, DrawingCanvas
+
+
+def test_desktop_entry_loads_pytorch_before_pyqt() -> None:
+    source = Path(desktop_app.__file__).read_text(encoding="utf-8")
+
+    assert source.index("from digit_recognizer.core.predictor import") < source.index(
+        "from PyQt5"
+    )
 
 
 @pytest.fixture(scope="module")

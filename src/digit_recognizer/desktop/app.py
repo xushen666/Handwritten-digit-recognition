@@ -5,6 +5,11 @@ from io import BytesIO
 from typing import Protocol
 
 from PIL import Image
+
+# PyTorch must load before PyQt on Windows to avoid c10.dll initialization failures.
+# isort: off
+from digit_recognizer.core.predictor import Prediction, Predictor
+
 from PyQt5.QtCore import QBuffer, QIODevice, QPoint, Qt
 from PyQt5.QtGui import QImage, QMouseEvent, QPainter, QPaintEvent, QPen
 from PyQt5.QtWidgets import (
@@ -16,10 +21,10 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+# isort: on
 
 from digit_recognizer.core.errors import BlankImageError, ModelLoadError
 from digit_recognizer.core.paths import default_model_path
-from digit_recognizer.core.predictor import Prediction, Predictor
 
 
 class PredictorLike(Protocol):
