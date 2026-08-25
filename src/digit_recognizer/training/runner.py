@@ -202,8 +202,17 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _plot_training_curves(history: dict[str, list[float]], destination: Path) -> None:
+def _load_pyplot() -> Any:
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
     import matplotlib.pyplot as plt
+
+    return plt
+
+
+def _plot_training_curves(history: dict[str, list[float]], destination: Path) -> None:
+    plt = _load_pyplot()
 
     epochs = range(1, len(history["train_loss"]) + 1)
     figure, axes = plt.subplots(1, 2, figsize=(11, 4))
@@ -221,7 +230,7 @@ def _plot_training_curves(history: dict[str, list[float]], destination: Path) ->
 
 
 def _plot_confusion_matrix(matrix: list[list[int]], destination: Path) -> None:
-    import matplotlib.pyplot as plt
+    plt = _load_pyplot()
 
     figure, axis = plt.subplots(figsize=(7, 6))
     image = axis.imshow(matrix, cmap="Blues")

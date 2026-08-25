@@ -1,7 +1,10 @@
 import hashlib
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+import matplotlib
 import pytest
 import torch
 from torch import nn
@@ -277,3 +280,46 @@ def test_main_exits_nonzero_below_minimum_accuracy(
         )
 
     assert raised.value.code != 0
+
+
+def test_plotters_select_agg_before_using_pyplot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class PlottingReached(Exception):
+        pass
+
+    backend_calls: list[tuple[str, bool]] = []
+
+    def record_backend(backend: str, *, force: bool = False) -> None:
+        backend_calls.append((backend, force))
+
+    def stop_at_subplots(*args: object, **kwargs: object) -> None:
+        assert backend_calls == [("Agg", True)]
+        raise PlottingReached
+
+    fake_pyplot = SimpleNamespace(subplots=stop_at_subplots)
+    monkeypatch.setattr(matplotlib, "use", record_backend)
+    monkeypatch.setitem(sys.modules, "matplotlib.pyplot", fake_pyplot)
+    monkeypatch.setattr(matplotlib, "pyplot", fake_pyplot, raising=False)
+    cases = [
+        (
+            runner._plot_training_curves,
+            {
+                "train_loss": [0.1],
+                "train_accuracy": [0.9],
+                "validation_loss": [0.2],
+                "validation_accuracy": [0.8],
+            },
+            tmp_path / "curves.png",
+        ),
+        (
+            runner._plot_confusion_matrix,
+            [[0] * 10 for _ in range(10)],
+            tmp_path / "matrix.png",
+        ),
+    ]
+
+    for plotter, value, destination in cases:
+        backend_calls.clear()
+        with pytest.raises(PlottingReached):
+            plotter(value, destination)
