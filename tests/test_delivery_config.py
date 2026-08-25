@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,26 @@ def test_windows_spec_packages_only_the_desktop_application() -> None:
 
     for forbidden_payload in ('"data"', '"reports"', '"tests"'):
         assert forbidden_payload not in normalized
+
+
+def test_windows_spec_resolves_resources_from_its_own_directory() -> None:
+    tree = ast.parse(_read(SPEC_PATH), filename=str(SPEC_PATH))
+    path_names = {"ROOT", "SOURCE_ROOT", "ENTRY_POINT", "MODEL_PATH"}
+    path_assignments = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id in path_names for target in node.targets)
+    ]
+    namespace = {"Path": Path, "SPECPATH": str(SPEC_PATH.parent)}
+    exec(compile(ast.Module(path_assignments, type_ignores=[]), str(SPEC_PATH), "exec"), namespace)
+
+    assert namespace["ROOT"] == ROOT
+    assert namespace["SOURCE_ROOT"] == ROOT / "src"
+    assert namespace["ENTRY_POINT"] == ROOT / "src/digit_recognizer/desktop/app.py"
+    assert namespace["MODEL_PATH"] == ROOT / "models/mnist_cnn.pth"
+    assert namespace["ENTRY_POINT"].is_file()
+    assert namespace["MODEL_PATH"].is_file()
 
 
 def test_quality_workflow_runs_the_desktop_quality_gates() -> None:

@@ -5,7 +5,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
 
-ROOT = Path(SPECPATH).resolve().parent.parent
+ROOT = Path(SPECPATH).resolve().parent
 SOURCE_ROOT = ROOT / "src"
 ENTRY_POINT = ROOT / "src" / "digit_recognizer" / "desktop" / "app.py"
 MODEL_PATH = ROOT / "models" / "mnist_cnn.pth"
