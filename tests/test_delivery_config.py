@@ -79,12 +79,32 @@ def test_release_workflow_builds_a_windows_zip_for_version_tags() -> None:
     assert "tags:" in normalized and "v*" in normalized
     assert "python-version: \"3.11\"" in normalized
     assert "https://download.pytorch.org/whl/cpu" in normalized
-    assert '.[desktop]' in normalized
+    assert '.[desktop,dev]' in normalized
     assert "pyinstaller" in normalized
     assert "packaging/windows.spec --clean --noconfirm" in normalized
     assert "compress-archive" in normalized
     assert "handwrittendigitrecognizer-windows-x64.zip" in normalized
     assert "softprops/action-gh-release@v2" in normalized
+    assert "qt_qpa_platform: offscreen" in normalized
+
+    ordered_release_gates = (
+        "python -m ruff check .",
+        "python -m pytest -v",
+        "python scripts/sync_docs.py --check",
+        "pyinstaller packaging/windows.spec --clean --noconfirm",
+        "dist/handwrittendigitrecognizer/_internal/models/mnist_cnn.pth",
+        "start-process",
+        "-passthru",
+        "-windowstyle hidden",
+        "start-sleep -seconds 8",
+        ".hasexited",
+        "finally",
+        "stop-process",
+        "compress-archive",
+        "uses: softprops/action-gh-release@v2",
+    )
+    positions = [normalized.index(gate) for gate in ordered_release_gates]
+    assert positions == sorted(positions)
 
 
 def test_delivery_configuration_has_no_backend_or_web_surface() -> None:

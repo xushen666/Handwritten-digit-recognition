@@ -28,11 +28,46 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.10,<2.12" "torchvision>=0.25,<0.27"
-          python -m pip install -e ".[desktop]"
+          python -m pip install -e ".[desktop,dev]"
           python -m pip install "pyinstaller>=6,<7"
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Test
+        run: python -m pytest -v
+
+      - name: Verify generated documentation
+        run: python scripts/sync_docs.py --check
 
       - name: Build onedir application
         run: pyinstaller packaging/windows.spec --clean --noconfirm
+
+      - name: Smoke-test packaged application
+        shell: pwsh
+        run: |
+          $modelPath = "dist\HandwrittenDigitRecognizer\_internal\models\mnist_cnn.pth"
+          $executablePath = "dist\HandwrittenDigitRecognizer\HandwrittenDigitRecognizer.exe"
+          if (-not (Test-Path -LiteralPath $modelPath -PathType Leaf)) {
+            throw "Packaged model is missing: $modelPath"
+          }
+          if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+            throw "Packaged executable is missing: $executablePath"
+          }
+
+          $process = $null
+          try {
+            $process = Start-Process -FilePath $executablePath -PassThru -WindowStyle Hidden
+            Start-Sleep -Seconds 8
+            if ($process.HasExited) {
+              throw "Packaged application exited during the smoke-test window."
+            }
+          }
+          finally {
+            if ($null -ne $process -and -not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
 
       - name: Create Windows ZIP
         shell: pwsh
