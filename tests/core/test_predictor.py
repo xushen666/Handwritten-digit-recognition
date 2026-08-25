@@ -20,6 +20,12 @@ def test_model_parameter_count_is_stable() -> None:
     assert parameter_count(ImprovedMNISTNet()) == 585_578
 
 
+def test_model_forward_returns_ten_logits_per_input() -> None:
+    output = ImprovedMNISTNet()(torch.randn(2, 1, 28, 28))
+
+    assert output.shape == (2, 10)
+
+
 def test_predictor_loads_state_dict_and_returns_prediction(tmp_path: Path) -> None:
     model_path = tmp_path / "model.pth"
     torch.save(ImprovedMNISTNet().state_dict(), model_path)
@@ -37,11 +43,12 @@ def test_predictor_rejects_missing_model(tmp_path: Path) -> None:
 
 
 def test_predictor_rejects_corrupt_model(tmp_path: Path) -> None:
-    model_path = tmp_path / "corrupt.pth"
-    model_path.write_bytes(b"not a torch checkpoint")
+    for marker in (b".", b"G"):
+        model_path = tmp_path / f"corrupt-{marker!r}.pth"
+        model_path.write_bytes(marker)
 
-    with pytest.raises(ModelLoadError):
-        Predictor.load(model_path)
+        with pytest.raises(ModelLoadError):
+            Predictor.load(model_path)
 
 
 def test_predictor_rejects_incompatible_state_dict(tmp_path: Path) -> None:
@@ -81,3 +88,15 @@ def test_development_default_model_path(monkeypatch: pytest.MonkeyPatch) -> None
     expected = Path(__file__).resolve().parents[2] / "models" / "mnist_cnn.pth"
 
     assert default_model_path() == expected
+
+
+def test_runtime_default_model_path_prefers_current_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("DIGIT_MODEL_PATH", raising=False)
+    monkeypatch.setattr("sys.frozen", False, raising=False)
+    monkeypatch.delattr("sys._MEIPASS", raising=False)
+    (tmp_path / "models").mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    assert default_model_path() == tmp_path / "models" / "mnist_cnn.pth"

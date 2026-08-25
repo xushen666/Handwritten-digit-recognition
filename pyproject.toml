@@ -13,8 +13,8 @@ authors = [{ name = "xushen666" }]
 dependencies = [
     "numpy>=1.26,<3",
     "pillow>=10,<12",
-    "torch>=2.3,<3",
-    "torchvision>=0.18,<1",
+    "torch>=2.10,<2.12",
+    "torchvision>=0.25,<0.27",
 ]
 
 [project.optional-dependencies]

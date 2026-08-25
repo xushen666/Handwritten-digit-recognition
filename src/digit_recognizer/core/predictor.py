@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -28,20 +27,11 @@ class Predictor:
         model_path = Path(path)
         if not model_path.is_file():
             raise ModelLoadError(f"Model file not found: {model_path}")
+        model = ImprovedMNISTNet()
         try:
             state = torch.load(model_path, map_location="cpu", weights_only=True)
-            model = ImprovedMNISTNet()
             model.load_state_dict(state)
-        except (
-            OSError,
-            RuntimeError,
-            ValueError,
-            TypeError,
-            KeyError,
-            AttributeError,
-            EOFError,
-            pickle.UnpicklingError,
-        ) as exc:
+        except Exception as exc:
             raise ModelLoadError("Model file is invalid or incompatible") from exc
         return cls(model)
 
