@@ -52,20 +52,32 @@ def test_predictor_rejects_incompatible_state_dict(tmp_path: Path) -> None:
         Predictor.load(model_path)
 
 
-def test_environment_model_path_takes_precedence(
+def test_frozen_default_model_path_uses_meipass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("DIGIT_MODEL_PATH", raising=False)
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
+
+    assert default_model_path() == tmp_path / "models" / "mnist_cnn.pth"
+
+
+def test_environment_model_path_wins_over_frozen_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     configured = tmp_path / "configured.pth"
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys._MEIPASS", str(tmp_path / "bundle"), raising=False)
     monkeypatch.setenv("DIGIT_MODEL_PATH", str(configured))
 
-    assert default_model_path() == configured.resolve()
+    assert default_model_path() == configured
 
 
 def test_development_default_model_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGIT_MODEL_PATH", raising=False)
-    monkeypatch.delattr("sys.frozen", raising=False)
+    monkeypatch.setattr("sys.frozen", False, raising=False)
+    monkeypatch.delattr("sys._MEIPASS", raising=False)
 
-    path = default_model_path()
+    expected = Path(__file__).resolve().parents[2] / "models" / "mnist_cnn.pth"
 
-    assert path.name == "mnist_cnn.pth"
-    assert path.parent.name == "models"
+    assert default_model_path() == expected
